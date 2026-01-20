@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Finance Tracker + AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Marked.js for markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<!-- Icons -->
+<link href="https://unpkg.com/lucide@latest/dist/umd/lucide.css" rel="stylesheet">
+
+<style>
+:root {
+  --glass: rgba(255,255,255,0.18);
+  --blur: blur(16px);
+  --radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: #111;
+  background: linear-gradient(135deg, #a8e6cf, #ffd3b6, #ffaaa5);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  background-size: cover;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 80% 30%, rgba(255, 255, 255, 0.04) 0%, transparent 35%),
+    radial-gradient(circle at 50% 70%, rgba(255, 255, 255, 0.03) 0%, transparent 25%),
+    linear-gradient(135deg, #a8e6cf, #ffd3b6, #ffaaa5);
+}
+
+/* Header */
+header {
+  padding: 30px;
+  color: white;
+}
+header h1 { margin: 0; font-size: 28px; }
+header p { opacity: 0.9; }
+
+/* Layout */
+.container { max-width: 1100px; margin:auto; padding:20px; }
+
+/* Glass Card */
+.card {
+  background: var(--glass);
+  backdrop-filter: var(--blur);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  margin-bottom: 20px;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+/* Buttons */
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-weight: 600;
+  background: rgba(255,255,255,0.25);
+  color: white;
+  transition: all 0.2s ease;
+}
+button:hover {
+  background: rgba(255,255,255,0.4);
+  transform: translateY(-1px);
+}
+
+/* Demo banner */
+#demoBanner {
+  background: rgba(255, 255, 0, 0.2);
+  color: #111;
+  text-align:center;
+  font-weight:700;
+  border-radius:12px;
+  padding:6px 12px;
+  margin-top:10px;
+  display:none;
+}
+
+/* File Input */
+input[type=file] {
+  background: white;
+  padding: 10px;
+  border-radius: 12px;
+  width: 100%;
+}
+
+/* Stats */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+  gap: 16px;
+}
+.stat {
+  background: rgba(255,255,255,0.2);
+  border-radius: var(--radius);
+  padding: 18px;
+  color: white;
+}
+
+/* Charts */
+canvas {
+  background: white;
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+/* Transactions */
+.txn {
+  display: flex;
+  justify-content: space-between;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.85);
+  margin-bottom: 10px;
+}
+.txn strong { color: #111; }
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Scrollable transaction list if very long */
+#txnList { max-height: 400px; overflow-y: auto; }
+
+/* AI Chat */
+#aiChatCard { background: rgba(255,255,255,0.9); padding: 16px; }
+#chatMessages {
+  background: #f4f4f4;
+  border-radius: 12px;
+  height: 250px;
+  overflow-y: auto;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.message { margin-bottom: 8px; }
+.message pre { background: #f0f0f0; padding:8px; border-radius:8px; overflow-x:auto; }
+.message code { background:#eee; padding:2px 4px; border-radius:4px; font-family:monospace; }
+.message p { margin:4px 0; }
+.message ul, .message ol { padding-left:20px; margin:4px 0; }
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>💸 Finance Tracker + AI</h1>
+  <p>Smart spending insights</p>
+</header>
+
+<div class="container">
+
+  <!-- Upload -->
+  <div class="card">
+    <h3>Import Transaction Log</h3>
+    <p>Format: <code>dd/mm/yyyy $amount to upiid /Category/</code></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="file" id="fileInput" accept=".txt,.log" style="flex:1;">
+      <button id="loadDemoBtn">Load Demo Log</button>
+    </div>
+    <div id="demoBanner">💛 Demo transactions loaded</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat">
+      <div>Total Spent</div>
+      <h2 id="totalSpent">₹0.00</h2>
+    </div>
+    <div class="stat">
+      <div>Daily Average</div>
+      <h2 id="avgSpent">₹0.00</h2>
+    </div>
+    <div class="stat">
+      <div>Transactions</div>
+      <h2 id="txnCount">0</h2>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="card">
+    <h3>Daily Spending Trend</h3>
+    <canvas id="lineChart" height="120"></canvas>
+  </div>
+
+  <div class="card">
+    <h3>Category Distribution</h3>
+    <canvas id="pieChart" height="120"></canvas>
+  </div>
+
+  <!-- Transactions -->
+  <div class="card">
+    <h3>Transactions</h3>
+    <div id="txnList"></div>
+  </div>
+
+  <!-- AI Chat -->
+  <div class="card" id="aiChatCard">
+    <h3>AI Assistant 🤖</h3>
+    <p>Paste your OpenRouter key below to start chatting:</p>
+    <input type="text" id="userKey" placeholder="sk-or-xxxx..." style="width:100%;padding:10px;border-radius:12px;border:2px solid #ddd;margin-bottom:8px;">
+    <div id="chatMessages"></div>
+    <div style="display:flex;gap:8px;">
+      <input id="userInput" placeholder="Ask AI about your transactions..." style="flex:1;padding:10px;border-radius:24px;border:2px solid #ddd;">
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ---------- Finance Tracker JS ---------- */
+const BASE_COLORS = [
+  "#ff6b6b","#4ecdc4","#45b7d1","#f7b801",
+  "#ffa07a","#9b59b6","#22c55e","#0ea5e9"
+];
+
+let colorIndex = 0;
+const dynamicCategories = {};
+const transactions = [];
+let lineChart, pieChart;
+
+function getCategory(name) {
+  if (!dynamicCategories[name]) {
+    dynamicCategories[name] = { name, color: BASE_COLORS[colorIndex % BASE_COLORS.length] };
+    colorIndex++;
+  }
+  return dynamicCategories[name];
+}
+
+function parseLog(text) {
+  text.split("\n").forEach(line => {
+    const match = line.match(/(\d{2})\/(\d{2})\/(\d{4})\s+\$(\d+(?:\.\d+)?)\s+to\s+(.+?)(?:\s+\/(.+)\/)?$/i);
+    if (!match) return;
+    const [, d, m, y, amt, upi, explicitCat] = match;
+    const merchant = upi.trim();
+    const categoryName = explicitCat ? explicitCat.trim() : "Uncategorized";
+    const category = getCategory(categoryName);
+    transactions.push({ date: `${y}-${m}-${d}`, amount: +amt, merchant, category: category.name });
+  });
+}
+
+function updateStats() {
+  const total = transactions.reduce((s,t)=>s+t.amount,0);
+  const days = new Set(transactions.map(t=>t.date)).size || 1;
+  totalSpent.textContent = `₹${total.toFixed(2)}`;
+  avgSpent.textContent = `₹${(total/days).toFixed(2)}`;
+  txnCount.textContent = transactions.length;
+}
+
+function renderTransactions() {
+  txnList.innerHTML = "";
+  transactions.slice().reverse().forEach(t => {
+    const c = dynamicCategories[t.category];
+    txnList.innerHTML += `
+      <div class="txn">
+        <div>
+          <strong>${t.merchant}</strong><br>
+          <small>${t.date}</small>
+        </div>
+        <div>
+          <strong>-₹${t.amount.toFixed(2)}</strong><br>
+          <span class="badge" style="background:${c.color}">${c.name}</span>
+        </div>
+      </div>`;
+  });
+}
+
+function renderCharts() {
+  const byDateCat = {};
+  const byCat = {};
+  transactions.forEach(t => {
+    byDateCat[t.category] ??= {};
+    byDateCat[t.category][t.date] = (byDateCat[t.category][t.date]||0)+t.amount;
+    byCat[t.category] = (byCat[t.category]||0)+t.amount;
+  });
+  const dates = [...new Set(transactions.map(t=>t.date))].sort();
+  const datasets = Object.keys(byDateCat).map(cat=>({
+    label: cat,
+    data: dates.map(d=>byDateCat[cat][d]||0),
+    borderColor: dynamicCategories[cat].color,
+    tension:0.4
+  }));
+  if(lineChart) lineChart.destroy();
+  if(pieChart) pieChart.destroy();
+  lineChart = new Chart(lineChartEl, { type:"line", data:{labels:dates,datasets}, options:{plugins:{legend:{display:true}}}});
+  pieChart = new Chart(pieChartEl, { type:"pie", data:{labels:Object.keys(byCat), datasets:[{data:Object.values(byCat), backgroundColor:Object.keys(byCat).map(k=>dynamicCategories[k].color)}]}});
+}
+
+const lineChartEl = document.getElementById("lineChart");
+const pieChartEl = document.getElementById("pieChart");
+const fileInput = document.getElementById("fileInput");
+
+/* ---------- AI Chat JS ---------- */
+const chatMessages = document.getElementById("chatMessages");
+const userInput = document.getElementById("userInput");
+const sendBtn = document.getElementById("sendBtn");
+const userKeyInput = document.getElementById("userKey");
+let conversationHistory = [];
+
+function addMessage(text, role){
+  const msg = document.createElement("div");
+  msg.className = "message " + role;
+  msg.innerHTML = marked.parse(text); // render markdown
+  chatMessages.appendChild(msg);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function addTyping(){
+  const t = document.createElement("div");
+  t.id="typing";
+  t.className="message assistant";
+  t.innerHTML=`<div style="font-style:italic;">Thinking…</div>`;
+  chatMessages.appendChild(t);
+  chatMessages.scrollTop=chatMessages.scrollHeight;
+}
+
+function removeTyping(){ const t=document.getElementById("typing"); if(t) t.remove(); }
+
+function getTransactionSummary(){
+  return transactions.map(t=>`${t.date}: ₹${t.amount.toFixed(2)} to ${t.merchant} [${t.category}]`).join("\n");
+}
+
+async function sendMessage(msg){
+  if(!msg) return;
+  const key = userKeyInput.value.trim();
+  if(!key){ alert("Please enter your OpenRouter API key!"); return; }
+  addMessage(msg,"user");
+  userInput.value="";
+  sendBtn.disabled=true;
+  addTyping();
+  let reply="";
+  try{
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer "+key
+      },
+      body:JSON.stringify({
+        model:"openai/gpt-4o-mini",
+        messages:[
+          ...conversationHistory,
+          {role:"user", content: msg}
+        ],
+        temperature:0.7,
+        max_tokens:1000
+      })
+    });
+    const data = await res.json();
+    reply = data.choices[0].message.content;
+  }catch(e){ reply="🤖 Error contacting AI."; console.error(e);}
+  removeTyping();
+  addMessage(reply,"assistant");
+  conversationHistory.push({role:"user",content:msg},{role:"assistant",content:reply});
+  sendBtn.disabled=false;
+  userInput.focus();
+}
+
+/* Auto-send transaction summary when log is uploaded */
+fileInput.onchange = e => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    parseLog(reader.result);
+    updateStats();
+    renderTransactions();
+    renderCharts();
+    const summary = getTransactionSummary();
+    if(summary){
+      conversationHistory.push({role:"system", content:`You are a finance assistant. Here are the user's transactions:\n${summary}\nBe ready to answer questions about totals, categories, trends, and spending.`});
+      addMessage("🤖 AI is ready to answer questions about your uploaded transactions.","assistant");
+    }
+  };
+  reader.readAsText(e.target.files[0]);
+};
+
+/* ---------- Demo Log Button ---------- */
+const loadDemoBtn = document.getElementById("loadDemoBtn");
+const demoBanner = document.getElementById("demoBanner");
+
+const demoLog = `01/11/2025 $55 to cafe@upi /Food/
+01/11/2025 $120 to grocery@upi /Groceries/
+01/11/2025 $15 to metro@upi /Transport/
+01/11/2025 $10 to donation@upi
+02/11/2025 $75 to lunch@upi /Food/
+02/11/2025 $20 to bus@upi /Transport/
+02/11/2025 $250 to tuition@upi /Education/
+02/11/2025 $40 to streaming@upi /Entertainment/
+03/11/2025 $35 to cafe@upi /Food/
+03/11/2025 $50 to snack@upi /Food/
+03/11/2025 $15 to metro@upi /Transport/
+03/11/2025 $90 to onlinecourse@upi /Education/
+03/11/2025 $25 to appstore@upi /Digital/
+04/11/2025 $60 to lunch@upi /Food/
+04/11/2025 $20 to bus@upi /Transport/
+04/11/2025 $150 to bookstore@upi /Books/
+04/11/2025 $30 to coffee@upi /Food/
+04/11/2025 $35 to streaming@upi /Entertainment/
+05/11/2025 $70 to groceries@upi /Groceries/
+05/11/2025 $20 to metro@upi /Transport/
+05/11/2025 $45 to lunch@upi /Food/
+05/11/2025 $200 to tuition@upi /Education/
+05/11/2025 $80 to movie@upi /Entertainment/
+05/11/2025 $20 to snack@upi /Food/
+05/11/2025 $25 to digital@upi /Digital/
+06/11/2025 $50 to cafe@upi /Food/
+06/11/2025 $15 to bus@upi /Transport/
+06/11/2025 $90 to onlinecourse@upi /Education/
+06/11/2025 $30 to groceries@upi /Groceries/
+06/11/2025 $60 to gym@upi /Health/
+06/11/2025 $35 to coffee@upi /Food/
+07/11/2025 $40 to lunch@upi /Food/
+07/11/2025 $25 to streaming@upi /Entertainment/
+07/11/2025 $15 to metro@upi /Transport/
+07/11/2025 $150 to outing@upi /Uncategorized/
+08/11/2025 $60 to groceries@upi /Groceries/
+08/11/2025 $20 to bus@upi /Transport/
+08/11/2025 $100 to bookstore@upi /Books/
+08/11/2025 $35 to lunch@upi /Food/
+08/11/2025 $40 to movie@upi /Entertainment/
+08/11/2025 $25 to coffee@upi /Food/
+09/11/2025 $40 to cafe@upi /Food/
+09/11/2025 $15 to metro@upi /Transport/
+09/11/2025 $90 to onlinecourse@upi /Education/
+09/11/2025 $30 to streaming@upi /Entertainment/
+09/11/2025 $20 to digital@upi /Digital/
+10/11/2025 $50 to groceries@upi /Groceries/
+10/11/2025 $10 to bus@upi /Transport/
+10/11/2025 $60 to lunch@upi /Food/
+10/11/2025 $200 to tuition@upi /Education/
+10/11/2025 $15 to coffee@upi /Food/
+11/11/2025 $35 to cafe@upi /Food/
+11/11/2025 $50 to snack@upi /Food/
+11/11/2025 $15 to metro@upi /Transport/
+11/11/2025 $80 to gym@upi /Health/
+11/11/2025 $25 to appstore@upi /Digital/
+11/11/2025 $40 to movie@upi /Entertainment/
+12/11/2025 $45 to lunch@upi /Food/
+12/11/2025 $20 to bus@upi /Transport/
+12/11/2025 $150 to bookstore@upi /Books/
+12/11/2025 $60 to groceries@upi /Groceries/
+12/11/2025 $10 to donation@upi
+13/11/2025 $50 to cafe@upi /Food/
+13/11/2025 $15 to metro@upi /Transport/
+13/11/2025 $90 to onlinecourse@upi /Education/
+13/11/2025 $25 to digital@upi /Digital/
+13/11/2025 $35 to coffee@upi /Food/
+13/11/2025 $60 to gym@upi /Health/
+14/11/2025 $40 to lunch@upi /Food/
+14/11/2025 $80 to outing@upi /Uncategorized/
+14/11/2025 $15 to metro@upi /Transport/
+14/11/2025 $50 to bookstore@upi /Books/
+14/11/2025 $20 to coffee@upi /Food/
+15/11/2025 $60 to groceries@upi /Groceries/
+15/11/2025 $10 to bus@upi /Transport/
+15/11/2025 $200 to tuition@upi /Education/
+15/11/2025 $40 to lunch@upi /Food/
+15/11/2025 $25 to digital@upi /Digital/
+15/11/2025 $100 to movie@upi /Entertainment/
+16/11/2025 $50 to cafe@upi /Food/
+16/11/2025 $15 to metro@upi /Transport/
+16/11/2025 $90 to onlinecourse@upi /Education/
+16/11/2025 $30 to groceries@upi /Groceries/
+16/11/2025 $60 to gym@upi /Health/
+16/11/2025 $20 to streaming@upi /Entertainment/
+17/11/2025 $35 to lunch@upi /Food/
+17/11/2025 $25 to coffee@upi /Food/
+17/11/2025 $15 to bus@upi /Transport/
+17/11/2025 $50 to bookstore@upi /Books/
+17/11/2025 $10 to appstore@upi /Digital/`;
+
+loadDemoBtn.onclick = () => {
+  transactions.length = 0; // reset
+  parseLog(demoLog);
+  updateStats();
+  renderTransactions();
+  renderCharts();
+  demoBanner.style.display="block";
+  const summary = getTransactionSummary();
+  if(summary){
+    conversationHistory.push({role:"system", content:`You are a finance assistant. Here are the user's transactions:\n${summary}\nBe ready to answer questions about totals, categories, trends, and spending.`});
+    addMessage("🤖 AI is ready to answer questions about your demo transactions.","assistant");
+  }
+};
+
+/* ---------- Send Button ---------- */
+sendBtn.onclick = () => sendMessage(userInput.value);
+userInput.addEventListener("keypress", e => { if(e.key==="Enter") sendMessage(userInput.value); });
+</script>
+
+</body>
+</html>
